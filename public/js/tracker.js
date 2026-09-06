@@ -730,9 +730,22 @@ const MobileTracker = {
       });
 
       if (!res.ok) {
-        const errData = await res.json();
-        // Si el administrador desvinculó el móvil desde la web
+        let errData = {};
+        try {
+          errData = await res.json();
+        } catch (e) {}
+
+        // Si el servidor responde 404 (token no reconocido o servidor reiniciado en la nube)
         if (res.status === 404) {
+          if (this.vehicleInfo && this.vehicleInfo.code) {
+            console.warn('Dispositivo no reconocido en servidor (posible reinicio de Render o base de datos). Intentando revinculación automática...');
+            const rePaired = await this.attemptAutoRePair();
+            if (rePaired) {
+              // Reintentar transmisión con el token revalidado
+              return await this.sendTelemetry(loc);
+            }
+          }
+          // Si no se pudo revincular (código borrado o vehículo eliminado por admin)
           this.handleRemoteUnlink();
           return;
         }
@@ -776,6 +789,36 @@ const MobileTracker = {
 
   clearOfflineQueue() {
     localStorage.removeItem('gps_offline_queue');
+  },
+
+  // Intentar auto-revinculación transparente si el servidor se reinició o recreó la base de datos
+  async attemptAutoRePair() {
+    if (!this.vehicleInfo || !this.vehicleInfo.code || !this.deviceToken) return false;
+    const serverUrl = this.getServerUrl();
+    const endpoint = `${serverUrl}/api/mobile/pair`;
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: this.vehicleInfo.code,
+          deviceToken: this.deviceToken,
+          deviceInfo: `${navigator.userAgent} (Auto-Reconectado)`
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.vehicle) {
+          this.vehicleInfo = data.vehicle;
+          localStorage.setItem('gps_vehicle_info', JSON.stringify(this.vehicleInfo));
+          console.log('✅ Auto-revinculación exitosa con vehículo:', data.vehicle.name);
+          return true;
+        }
+      }
+    } catch (err) {
+      console.warn('No se pudo completar la revinculación automática:', err);
+    }
+    return false;
   },
 
   initNetworkListener() {

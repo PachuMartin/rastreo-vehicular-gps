@@ -86,13 +86,11 @@ const SimulatorManager = {
       };
 
       try {
-        // Inyectar punto directamente a la DB del servidor
-        await fetch(`/api/mobile/location`, {
+        // Inyectar punto directamente a la DB del servidor sin alterar el dispositivo real
+        await fetch(`/api/vehicles/${vehicleId}/simulate-location`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            // Buscamos el token del vehículo o lo enviamos con un token temporal
-            deviceToken: await this.getOrCreateVehicleToken(vehicleId),
             location: payload
           })
         });
@@ -121,24 +119,6 @@ const SimulatorManager = {
     showToast('Simulación en vivo detenida', 'info');
   },
 
-  async getOrCreateVehicleToken(vehicleId) {
-    const v = AdminManager.vehicles.find(item => item.id == vehicleId);
-    if (v && v.device_token) return v.device_token;
-
-    // Si no tiene token asignado, vincularlo automáticamente con uno de prueba
-    const tempToken = `SIM-DEV-${vehicleId}`;
-    await fetch('/api/mobile/pair', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        code: v.code,
-        deviceToken: tempToken,
-        deviceInfo: 'Simulador GPS Integrado'
-      })
-    });
-    return tempToken;
-  },
-
   // 2. Generar un día completo de recorrido al instante para probar el historial
   async generateFullDayHistory() {
     const vSelect = document.getElementById('sim-vehicle-select');
@@ -150,7 +130,6 @@ const SimulatorManager = {
     }
 
     const todayStr = new Date().toISOString().slice(0, 10);
-    const token = await this.getOrCreateVehicleToken(vehicleId);
 
     showToast('Generando recorrido de prueba con 40 puntos y 3 paradas...', 'info');
 
@@ -190,11 +169,10 @@ const SimulatorManager = {
     });
 
     try {
-      const res = await fetch('/api/mobile/location', {
+      const res = await fetch(`/api/vehicles/${vehicleId}/simulate-location`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          deviceToken: token,
           locations
         })
       });

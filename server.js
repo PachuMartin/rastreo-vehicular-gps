@@ -268,6 +268,54 @@ app.post('/api/mobile/location', async (req, res) => {
   }
 });
 
+// 4.1 Inyectar ubicaciones de simulación sin alterar el token del teléfono
+app.post('/api/vehicles/:id/simulate-location', async (req, res) => {
+  try {
+    const vehicleId = req.params.id;
+    const vehicle = await db.getVehicleById(vehicleId);
+    if (!vehicle) {
+      return res.status(404).json({ error: 'Vehículo no encontrado' });
+    }
+
+    const { locations, location } = req.body;
+    const pointsToRecord = Array.isArray(locations) ? locations : (location ? [location] : []);
+    if (pointsToRecord.length === 0) {
+      return res.status(400).json({ error: 'No se enviaron datos de posición para la simulación' });
+    }
+
+    let lastResult = null;
+    for (const pt of pointsToRecord) {
+      lastResult = await db.recordLocation(vehicle.id, {
+        latitude: pt.latitude,
+        longitude: pt.longitude,
+        speed: pt.speed || 0,
+        heading: pt.heading || 0,
+        accuracy: pt.accuracy || 0,
+        battery_level: pt.battery_level !== undefined ? pt.battery_level : null,
+        recorded_at: pt.recorded_at || null
+      });
+    }
+
+    if (lastResult) {
+      broadcast('LOCATION_UPDATE', {
+        vehicle: {
+          id: vehicle.id,
+          name: vehicle.name,
+          plate: vehicle.plate,
+          type: vehicle.type,
+          color: vehicle.color,
+          driver_name: vehicle.driver_name
+        },
+        location: lastResult
+      });
+    }
+
+    res.json({ success: true, pointsRecorded: pointsToRecord.length, last: lastResult });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 5. Historial Diario de Recorridos
 app.get('/api/vehicles/:id/history', async (req, res) => {
   try {
