@@ -44,10 +44,49 @@
           <input type="text" id="pair-code-input" required placeholder="Ej. TRK-1001" class="w-full bg-slate-950 border-2 border-slate-700 focus:border-blue-500 rounded-xl px-4 py-3.5 text-center font-mono text-xl font-bold tracking-widest text-blue-400 uppercase focus:outline-none transition">
         </div>
 
-        <button type="submit" class="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-900/40 transition">
+        <!-- Servidor Destino (Configurable) -->
+        <div class="text-left bg-slate-950/70 p-3 rounded-xl border border-slate-800">
+          <div class="flex items-center justify-between mb-1">
+            <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Servidor Web / API:</label>
+            <span id="server-detected-badge" class="text-[10px] text-blue-400 font-mono">Automático</span>
+          </div>
+          <input type="text" id="server-url-input" placeholder="https://tu-app.onrender.com" class="w-full bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none transition">
+          <div class="text-[10px] text-slate-500 mt-1">Si instalaste el APK, escribe la dirección de tu servidor en Render o tu IP local.</div>
+        </div>
+
+        <button type="submit" id="btn-pair-submit" class="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-900/40 transition">
           🚀 Vincular y Activar Rastreo Permanente
         </button>
       </form>
+
+      <!-- Panel de Error de Vinculación y Descarga de Diagnóstico en TXT -->
+      <div id="pairing-error-box" class="hidden text-left bg-red-950/50 border-2 border-red-800/80 rounded-2xl p-4 space-y-3 shadow-xl">
+        <div class="flex items-start gap-2.5">
+          <span class="text-2xl">⚠️</span>
+          <div class="flex-1">
+            <h4 class="text-xs font-bold text-red-200 uppercase tracking-wider">Fallo al Vincular Dispositivo</h4>
+            <p id="pairing-error-msg" class="text-xs text-red-300 mt-1 break-words font-medium">
+              No se pudo conectar con el servidor.
+            </p>
+          </div>
+        </div>
+
+        <div class="text-[11px] text-slate-400 bg-slate-950/80 p-2.5 rounded-lg border border-slate-800 space-y-1 font-mono">
+          <div>Servidor: <span id="err-diag-server" class="text-slate-300">--</span></div>
+          <div>Código: <span id="err-diag-code" class="text-blue-300">--</span></div>
+          <div>Internet: <span id="err-diag-net" class="text-slate-300">--</span></div>
+        </div>
+
+        <!-- Botón de Descarga del Archivo de Texto -->
+        <div class="pt-1 flex flex-col sm:flex-row gap-2">
+          <button type="button" id="btn-download-error-log" class="flex-1 py-2.5 px-3 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-red-950/50">
+            <span>📥</span> Descargar Informe de Error (.txt)
+          </button>
+          <button type="button" id="btn-copy-error-log" class="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1">
+            <span>📋</span> Copiar
+          </button>
+        </div>
+      </div>
 
       <div class="text-[11px] text-slate-500 pt-2 border-t border-slate-800/80">
         Una vez vinculado, la app transmitirá la posición en segundo plano y solo podrá detenerse con el PIN de administrador.

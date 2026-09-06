@@ -1,4 +1,4 @@
-// Módulo Móvil: Rastreo Continuo en Segundo Plano, WakeLock, Búfer Offline y Bloqueo por PIN
+// Módulo Móvil: Rastreo Continuo en Segundo Plano, WakeLock, Búfer Offline, Bloqueo por PIN y Diagnóstico de Errores
 const MobileTracker = {
   isTracking: false,
   deviceToken: null,
@@ -12,13 +12,59 @@ const MobileTracker = {
   ws: null,
   localMap: null,
   localRouteLayer: null,
+  lastPairingError: null,
 
   async init() {
     this.initDeviceToken();
+    this.initServerUrlInput();
     this.bindEvents();
     this.checkPairStatus();
     this.initNetworkListener();
     this.initWebSocket();
+  },
+
+  // Obtener la URL del servidor configurada
+  getServerUrl() {
+    const input = document.getElementById('server-url-input');
+    if (input && input.value && input.value.trim()) {
+      return input.value.trim().replace(/\/+$/, '');
+    }
+    const saved = localStorage.getItem('gps_server_url');
+    if (saved && saved.trim()) {
+      return saved.trim().replace(/\/+$/, '');
+    }
+    // Si corre en web y no en localhost dentro de un emulador/APK
+    if (window.location.origin && !window.location.origin.includes('localhost') && window.location.protocol.startsWith('http')) {
+      return window.location.origin;
+    }
+    return '';
+  },
+
+  initServerUrlInput() {
+    const input = document.getElementById('server-url-input');
+    if (!input) return;
+
+    const saved = localStorage.getItem('gps_server_url');
+    const badge = document.getElementById('server-detected-badge');
+
+    if (saved) {
+      input.value = saved;
+      if (badge) badge.innerText = 'Guardado';
+    } else if (window.location.origin && !window.location.origin.includes('localhost') && window.location.protocol.startsWith('http')) {
+      input.value = window.location.origin;
+      if (badge) badge.innerText = 'Detectado';
+    } else {
+      input.value = '';
+      if (badge) badge.innerText = 'Requerido en APK';
+    }
+
+    input.addEventListener('change', () => {
+      const val = input.value.trim().replace(/\/+$/, '');
+      if (val) {
+        localStorage.setItem('gps_server_url', val);
+        if (badge) badge.innerText = 'Guardado';
+      }
+    });
   },
 
   // Generar o recuperar token único del dispositivo
@@ -36,6 +82,18 @@ const MobileTracker = {
     const pairForm = document.getElementById('mobile-pair-form');
     if (pairForm) {
       pairForm.addEventListener('submit', (e) => this.handlePairSubmit(e));
+    }
+
+    // Botón de descargar informe de error
+    const btnDownloadError = document.getElementById('btn-download-error-log');
+    if (btnDownloadError) {
+      btnDownloadError.addEventListener('click', () => this.downloadErrorLog());
+    }
+
+    // Botón de copiar diagnóstico
+    const btnCopyError = document.getElementById('btn-copy-error-log');
+    if (btnCopyError) {
+      btnCopyError.addEventListener('click', () => this.copyErrorLog());
     }
 
     // Botón de desvincular (protegido con PIN)
@@ -112,28 +170,84 @@ const MobileTracker = {
     e.preventDefault();
     const codeInput = document.getElementById('pair-code-input');
     const code = codeInput ? codeInput.value.trim().toUpperCase() : '';
+    const errorBox = document.getElementById('pairing-error-box');
+    const btnSubmit = document.getElementById('btn-pair-submit');
+
+    if (errorBox) errorBox.classList.add('hidden');
 
     if (!code) {
       showToast('Por favor ingresa el código de activación', 'warning');
       return;
     }
 
+    // Obtener y normalizar la URL del servidor
+    let serverUrl = this.getServerUrl();
+    if (!serverUrl) {
+      // Si está vacía y estamos en localhost / app instalada
+      if (window.location.protocol.startsWith('http') && !window.location.origin.includes('localhost')) {
+        serverUrl = window.location.origin;
+      } else {
+        serverUrl = 'https://' + window.location.host;
+      }
+    }
+
+    // Asegurar protocolo http/https
+    if (!serverUrl.startsWith('http://') && !serverUrl.startsWith('https://')) {
+      serverUrl = 'https://' + serverUrl;
+    }
+    serverUrl = serverUrl.replace(/\/+$/, '');
+
+    // Guardar para futuros envíos
+    localStorage.setItem('gps_server_url', serverUrl);
+    const serverInput = document.getElementById('server-url-input');
+    if (serverInput) serverInput.value = serverUrl;
+
     const deviceInfo = `${navigator.userAgent} - ${navigator.platform}`;
+    const endpoint = `${serverUrl}/api/mobile/pair`;
+
+    if (btnSubmit) {
+      btnSubmit.disabled = true;
+      btnSubmit.innerText = '⏳ Conectando con servidor...';
+    }
 
     try {
       showToast('Vinculando con el servidor...', 'info');
-      const res = await fetch('/api/mobile/pair', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code,
-          deviceToken: this.deviceToken,
-          deviceInfo
-        })
-      });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      // Controlador de timeout de 15 segundos
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+      let res, responseText, data;
+      try {
+        res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            code,
+            deviceToken: this.deviceToken,
+            deviceInfo
+          }),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        responseText = await res.text();
+      } catch (fetchErr) {
+        clearTimeout(timeoutId);
+        throw fetchErr;
+      }
+
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseErr) {
+        data = { error: responseText || 'Respuesta no válida del servidor' };
+      }
+
+      if (!res.ok) {
+        const customError = new Error(data.error || `HTTP ${res.status}: Fallo de respuesta del servidor`);
+        customError.httpStatus = res.status;
+        customError.responseText = responseText;
+        throw customError;
+      }
 
       this.vehicleInfo = data.vehicle;
       localStorage.setItem('gps_vehicle_info', JSON.stringify(this.vehicleInfo));
@@ -141,8 +255,180 @@ const MobileTracker = {
       showToast(`¡Vehículo vinculado: ${this.vehicleInfo.name}!`, 'success');
       this.showActiveTrackingScreen();
       this.startBackgroundTracking();
+
     } catch (err) {
-      showToast(err.message, 'danger');
+      console.error('Fallo en vinculación:', err);
+
+      // Guardar detalle para generar el archivo de texto descargable
+      this.lastPairingError = {
+        timestamp: new Date(),
+        code,
+        serverUrl,
+        endpoint,
+        message: err.name === 'AbortError' ? 'Tiempo de espera agotado (Timeout 15s). El servidor no respondió.' : (err.message || 'Error de conexión desconocido'),
+        httpStatus: err.httpStatus || (err.name === 'AbortError' ? 408 : 0),
+        responseText: err.responseText || '',
+        stack: err.stack || '',
+        deviceInfo
+      };
+
+      this.displayPairingError(this.lastPairingError);
+      showToast('Error de vinculación. Puedes descargar el informe de error.', 'danger');
+
+    } finally {
+      if (btnSubmit) {
+        btnSubmit.disabled = false;
+        btnSubmit.innerText = '🚀 Vincular y Activar Rastreo Permanente';
+      }
+    }
+  },
+
+  // Mostrar el error en la interfaz móvil
+  displayPairingError(errInfo) {
+    const errorBox = document.getElementById('pairing-error-box');
+    const msgElem = document.getElementById('pairing-error-msg');
+    const srvElem = document.getElementById('err-diag-server');
+    const codeElem = document.getElementById('err-diag-code');
+    const netElem = document.getElementById('err-diag-net');
+
+    if (!errorBox) return;
+
+    if (msgElem) {
+      let friendly = errInfo.message;
+      if (errInfo.message.includes('Failed to fetch') || errInfo.httpStatus === 0) {
+        friendly = `No se pudo conectar a "${errInfo.serverUrl}". Revisa que la URL del servidor sea accesible desde internet (ej. en Render) y que tengas conexión de datos o Wi-Fi.`;
+      }
+      msgElem.innerText = friendly;
+    }
+
+    if (srvElem) srvElem.innerText = errInfo.serverUrl || 'No definida';
+    if (codeElem) codeElem.innerText = errInfo.code || '--';
+    if (netElem) netElem.innerText = navigator.onLine ? 'Conectado a Internet' : 'Sin conexión de red (Offline)';
+
+    errorBox.classList.remove('hidden');
+    errorBox.scrollIntoView({ behavior: 'smooth' });
+  },
+
+  // Generar texto plano del informe de diagnóstico
+  getReportText() {
+    const err = this.lastPairingError || {
+      timestamp: new Date(),
+      code: 'N/A',
+      serverUrl: this.getServerUrl(),
+      endpoint: `${this.getServerUrl()}/api/mobile/pair`,
+      message: 'Diagnóstico generado manualmente',
+      httpStatus: 0,
+      responseText: '',
+      stack: ''
+    };
+
+    const now = new Date();
+    const isCapacitor = Boolean(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+
+    return [
+      '====================================================================',
+      '        INFORME DE ERROR DE VINCULACIÓN - GPS VEHICULAR PRO         ',
+      '====================================================================',
+      `Fecha y Hora Local : ${now.toLocaleString()}`,
+      `Fecha y Hora UTC   : ${now.toISOString()}`,
+      `Código de Unidad   : ${err.code}`,
+      `Servidor Destino   : ${err.serverUrl}`,
+      `Endpoint Intentado : ${err.endpoint}`,
+      '',
+      '--------------------------------------------------------------------',
+      '1. DETALLE DEL ERROR',
+      '--------------------------------------------------------------------',
+      `Mensaje de Error   : ${err.message}`,
+      `Código HTTP Status : ${err.httpStatus !== undefined ? err.httpStatus : '0 (Sin respuesta del servidor / Error de Red)'}`,
+      `Respuesta Servidor : ${err.responseText || '(Sin datos devueltos)'}`,
+      '',
+      'Pila de Ejecución (Stack Trace):',
+      err.stack || '(No disponible)',
+      '',
+      '--------------------------------------------------------------------',
+      '2. DIAGNÓSTICO DEL DISPOSITIVO Y ENTORNO',
+      '--------------------------------------------------------------------',
+      `Internet Detectado : ${navigator.onLine ? 'SÍ (En línea)' : 'NO (Sin internet)'}`,
+      `App Nativa (APK)   : ${isCapacitor ? 'SÍ (Capacitor / Android Nativo)' : 'NO (Navegador Web / PWA)'}`,
+      `Origen Web         : ${window.location.origin || 'null'}`,
+      `URL de la Pantalla : ${window.location.href}`,
+      `User-Agent Móvil   : ${navigator.userAgent}`,
+      `Plataforma         : ${navigator.platform}`,
+      `Soporte GPS        : ${'geolocation' in navigator ? 'SÍ (Disponible)' : 'NO (No soportado)'}`,
+      `Almacenamiento     : ${typeof localStorage !== 'undefined' ? 'SÍ (Disponible)' : 'NO'}`,
+      `Token Dispositivo  : ${this.deviceToken}`,
+      '',
+      '--------------------------------------------------------------------',
+      '3. GUÍA RÁPIDA DE RESOLUCIÓN',
+      '--------------------------------------------------------------------',
+      'A) Si el error dice "Failed to fetch" o "Status 0":',
+      '   - El teléfono no logra llegar a la dirección del servidor.',
+      '   - Si estás usando el instalador APK en el celular, la casilla "Servidor Web"',
+      '     NO debe decir "localhost". Debe tener la URL pública de tu servidor',
+      '     (ejemplo: https://gps-flota-xxxx.onrender.com).',
+      '',
+      'B) Si el error dice "Código de activación inválido o vehículo no encontrado":',
+      '   - El código ingresado no existe en el Panel Web Administrador.',
+      '   - Ingresa al panel en la PC y verifica el código asignado (ej: TRK-1001).',
+      '',
+      'C) Si el error es HTTP 404 o 500:',
+      '   - El servicio en Render puede estar iniciándose. Espera 1 minuto y reintenta.',
+      '===================================================================='
+    ].join('\r\n');
+  },
+
+  // Descargar el archivo .txt directamente en el dispositivo móvil
+  downloadErrorLog() {
+    const reportText = this.getReportText();
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const timestampStr = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    const filename = `error_vinculacion_gps_${timestampStr}.txt`;
+
+    try {
+      // Crear blob con codificación de texto
+      const blob = new Blob([reportText], { type: 'text/plain;charset=utf-8' });
+      const downloadUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(downloadUrl);
+      }, 200);
+
+      showToast(`Archivo descargado: ${filename}`, 'success');
+    } catch (e) {
+      console.error('Error al descargar archivo:', e);
+      this.copyErrorLog();
+    }
+  },
+
+  // Copiar el diagnóstico al portapapeles
+  copyErrorLog() {
+    const reportText = this.getReportText();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(reportText).then(() => {
+        showToast('Diagnóstico copiado al portapapeles', 'success');
+      }).catch(() => {
+        showToast('Texto copiado en consola', 'info');
+      });
+    } else {
+      // Intento alternativo
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = reportText;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        showToast('Diagnóstico copiado al portapapeles', 'success');
+      } catch (err) {
+        showToast('No se pudo copiar automáticamente', 'warning');
+      }
     }
   },
 
@@ -232,12 +518,15 @@ const MobileTracker = {
       return;
     }
 
+    const serverUrl = this.getServerUrl();
+    const endpoint = `${serverUrl}/api/mobile/location`;
+
     try {
       // Si hay elementos acumulados en offline, enviar en lote
       const queue = this.getOfflineQueue();
       const pointsToSend = [...queue, loc];
 
-      const res = await fetch('/api/mobile/location', {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -315,7 +604,6 @@ const MobileTracker = {
       if ('wakeLock' in navigator) {
         this.wakeLock = await navigator.wakeLock.request('screen');
         this.wakeLock.addEventListener('release', () => {
-          // Re-solicitar si fue liberado involuntariamente
           if (this.isTracking) this.requestWakeLock();
         });
       }
@@ -330,7 +618,6 @@ const MobileTracker = {
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       if (AudioContext && !this.audioContext) {
         this.audioContext = new AudioContext();
-        // Crear un oscilador con ganancia en 0 (inaudible)
         const osc = this.audioContext.createOscillator();
         const gain = this.audioContext.createGain();
         gain.gain.value = 0.0001;
@@ -394,9 +681,11 @@ const MobileTracker = {
   async handlePinVerification(e) {
     e.preventDefault();
     const pin = document.getElementById('verify-pin-input').value;
+    const serverUrl = this.getServerUrl();
+    const endpoint = `${serverUrl}/api/settings/verify-pin`;
 
     try {
-      const res = await fetch('/api/settings/verify-pin', {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pin })
@@ -479,9 +768,11 @@ const MobileTracker = {
     if (!this.vehicleInfo) return;
     const dateInput = document.getElementById('mobile-date-input');
     const date = dateInput ? dateInput.value : new Date().toISOString().slice(0, 10);
+    const serverUrl = this.getServerUrl();
+    const endpoint = `${serverUrl}/api/vehicles/${this.vehicleInfo.id}/history?date=${date}`;
 
     try {
-      const res = await fetch(`/api/vehicles/${this.vehicleInfo.id}/history?date=${date}`);
+      const res = await fetch(endpoint);
       if (!res.ok) throw new Error((await res.json()).error);
       const data = await res.json();
 
@@ -497,28 +788,46 @@ const MobileTracker = {
 
   // WebSocket para actualizaciones en vivo (renombrado remoto de vehículo)
   initWebSocket() {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}`;
-    this.ws = new WebSocket(wsUrl);
+    if (window.location.protocol === 'file:') return;
 
-    this.ws.onmessage = (event) => {
+    let wsHost = window.location.host;
+    let wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+
+    const serverUrl = this.getServerUrl();
+    if (serverUrl) {
       try {
-        const msg = JSON.parse(event.data);
-        if (msg.type === 'VEHICLE_UPDATED' && this.vehicleInfo && msg.payload.id === this.vehicleInfo.id) {
-          // El administrador cambió el nombre o datos del vehículo desde la web
-          this.vehicleInfo = msg.payload;
-          localStorage.setItem('gps_vehicle_info', JSON.stringify(this.vehicleInfo));
-          this.showActiveTrackingScreen();
-          showToast(`Datos actualizados desde el panel web: ${this.vehicleInfo.name}`, 'info');
-        } else if (msg.type === 'DEVICE_UNLINKED' && this.vehicleInfo && msg.payload.vehicleId === this.vehicleInfo.id) {
-          this.handleRemoteUnlink();
-        }
+        const parsed = new URL(serverUrl);
+        wsHost = parsed.host;
+        wsProto = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
       } catch (e) {}
-    };
+    }
 
-    this.ws.onclose = () => {
-      setTimeout(() => this.initWebSocket(), 5000);
-    };
+    if (!wsHost || wsHost.includes('localhost') && window.Capacitor) return;
+
+    try {
+      const wsUrl = `${wsProto}//${wsHost}`;
+      this.ws = new WebSocket(wsUrl);
+
+      this.ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'VEHICLE_UPDATED' && this.vehicleInfo && msg.payload.id === this.vehicleInfo.id) {
+            this.vehicleInfo = msg.payload;
+            localStorage.setItem('gps_vehicle_info', JSON.stringify(this.vehicleInfo));
+            this.showActiveTrackingScreen();
+            showToast(`Datos actualizados desde el panel web: ${this.vehicleInfo.name}`, 'info');
+          } else if (msg.type === 'DEVICE_UNLINKED' && this.vehicleInfo && msg.payload.vehicleId === this.vehicleInfo.id) {
+            this.handleRemoteUnlink();
+          }
+        } catch (e) {}
+      };
+
+      this.ws.onclose = () => {
+        setTimeout(() => this.initWebSocket(), 5000);
+      };
+    } catch (e) {
+      console.warn('WebSocket móvil error:', e);
+    }
   }
 };
 
