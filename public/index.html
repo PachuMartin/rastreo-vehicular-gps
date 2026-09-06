@@ -15,6 +15,11 @@
   <!-- Estilos Personalizados -->
   <link rel="stylesheet" href="/css/styles.css">
   <link rel="manifest" href="/manifest.json">
+  <script>
+    if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
+      window.location.replace('mobile.html');
+    }
+  </script>
 </head>
 <body class="bg-slate-950 text-slate-100 flex flex-col min-h-screen">
 

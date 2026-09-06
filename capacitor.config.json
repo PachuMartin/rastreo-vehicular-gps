@@ -1,0 +1,9 @@
+{
+  "appId": "com.gpsflota.tracker",
+  "appName": "GPS Vehicular Pro",
+  "webDir": "public",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  }
+}
