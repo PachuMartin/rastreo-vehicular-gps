@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Rastreo Vehicular GPS - Panel Central</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Estilos Personalizados -->
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="manifest" href="/manifest.json">
+</head>
+<body class="bg-slate-950 text-slate-100 flex flex-col min-h-screen">
+
+  <!-- ENCABEZADO Y NAVEGACIÓN PRINCIPAL -->
+  <header class="header-nav px-4 py-3 border-b border-slate-800 bg-slate-900/90 backdrop-blur">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+      
+      <!-- Logo y Estado -->
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-xl font-black text-white shadow-lg shadow-blue-500/30">
+          🛰️
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg font-extrabold tracking-tight text-white">GPS Flota Pro</h1>
+            <span id="server-status-beacon" class="pulse-beacon" title="Conectado"></span>
+          </div>
+          <p class="text-xs text-slate-400">Monitoreo en Tiempo Real e Historial de Rutas</p>
+        </div>
+      </div>
+
+      <!-- Pestañas de Navegación -->
+      <nav class="flex items-center gap-1 bg-slate-800/80 p-1 rounded-xl border border-slate-700/60 text-xs sm:text-sm">
+        <button data-tab="tab-fleet" class="nav-tab-btn active px-3.5 py-2 font-semibold rounded-lg transition border-b-2 border-blue-500 text-blue-400">
+          🗺️ Mapa en Vivo
+        </button>
+        <button data-tab="tab-history" class="nav-tab-btn px-3.5 py-2 font-semibold rounded-lg transition border-b-2 border-transparent text-slate-400 hover:text-slate-200">
+          📅 Historial por Día
+        </button>
+        <button data-tab="tab-admin" class="nav-tab-btn px-3.5 py-2 font-semibold rounded-lg transition border-b-2 border-transparent text-slate-400 hover:text-slate-200">
+          ⚙️ Gestión de Vehículos
+        </button>
+        <button data-tab="tab-simulator" class="nav-tab-btn px-3.5 py-2 font-semibold rounded-lg transition border-b-2 border-transparent text-slate-400 hover:text-slate-200">
+          🧪 Simulador GPS
+        </button>
+      </nav>
+
+      <!-- Botón Acceso Rápido a App Móvil -->
+      <div class="flex items-center gap-2">
+        <a href="/mobile" target="_blank" class="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-emerald-900/30">
+          <span>📱 Abrir Vista Móvil</span>
+          <span class="text-[10px] bg-emerald-800/60 px-1.5 py-0.5 rounded">Vehículo</span>
+        </a>
+      </div>
+
+    </div>
+
+    <!-- Barra de Conexión Wi-Fi para Móviles -->
+    <div class="max-w-7xl mx-auto mt-2 pt-2 border-t border-slate-800/60 flex flex-wrap items-center justify-between text-[11px] text-slate-400 gap-2">
+      <div class="flex items-center gap-2">
+        <span class="text-slate-300 font-semibold">📲 Para conectar un celular en tu red Wi-Fi:</span>
+        <div id="mobile-connect-ips" class="flex flex-wrap gap-1.5">
+          <span class="font-mono text-blue-300">Cargando direcciones de red...</span>
+        </div>
+      </div>
+      <div class="text-slate-500">
+        PIN Maestro por defecto: <b class="text-slate-400">1234</b>
+      </div>
+    </div>
+  </header>
+
+  <!-- CONTENEDOR PRINCIPAL DE PESTAÑAS -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-5 flex flex-col">
+
+    <!-- ============================================================== -->
+    <!-- PESTAÑA 1: MAPA EN VIVO DE LA FLOTA -->
+    <!-- ============================================================== -->
+    <section id="tab-fleet" class="tab-content-section flex-1 flex flex-col gap-4">
+      <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 flex-1 h-[75vh]">
+        
+        <!-- Barra Lateral de Vehículos de la Flota -->
+        <div class="lg:col-span-1 bg-slate-900/70 border border-slate-800 rounded-2xl p-4 flex flex-col h-full overflow-hidden shadow-xl">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-bold uppercase tracking-wider text-slate-400">Vehículos Monitoreados</h2>
+            <button onclick="MapManager.fitAllVehicles()" class="text-xs text-blue-400 hover:text-blue-300 transition">
+              Enfocar todos 🎯
+            </button>
+          </div>
+
+          <div id="fleet-side-list" class="flex-1 overflow-y-auto space-y-2.5 pr-1">
+            <!-- Renderizado dinámico desde app.js -->
+            <div class="text-xs text-slate-500 py-6 text-center">Cargando vehículos...</div>
+          </div>
+        </div>
+
+        <!-- Mapa Principal de la Flota (Leaflet) -->
+        <div class="lg:col-span-3 bg-slate-900/70 border border-slate-800 rounded-2xl overflow-hidden relative shadow-xl h-full flex flex-col">
+          <div id="fleet-map" class="w-full h-full z-0"></div>
+
+          <!-- Leyenda Flotante -->
+          <div class="absolute bottom-4 left-4 z-10 bg-slate-900/90 backdrop-blur border border-slate-700/80 rounded-xl px-3 py-2 text-xs flex items-center gap-4 text-slate-300 shadow-2xl">
+            <div class="flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+              <span>En marcha</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+              <span>Detenido</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-slate-600"></span>
+              <span>Offline</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- PESTAÑA 2: HISTORIAL DE RECORRIDOS POR DÍA -->
+    <!-- ============================================================== -->
+    <section id="tab-history" class="tab-content-section hidden flex-1 flex flex-col gap-4">
+      
+      <!-- Barra de Filtros: Vehículo y Fecha -->
+      <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-lg">
+        <div class="flex flex-wrap items-center gap-3">
+          <div>
+            <label class="block text-[11px] font-bold text-slate-400 mb-1 uppercase tracking-wider">Vehículo:</label>
+            <select id="history-vehicle-select" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500 min-w-[220px]">
+              <!-- Poblado dinámicamente -->
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-[11px] font-bold text-slate-400 mb-1 uppercase tracking-wider">Fecha de Recorrido:</label>
+            <input type="date" id="history-date-input" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500">
+          </div>
+
+          <div class="pt-5">
+            <button id="btn-load-history" class="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-bold transition flex items-center gap-1.5 shadow-md shadow-blue-900/30">
+              🔍 Consultar Recorrido
+            </button>
+          </div>
+        </div>
+
+        <div class="text-xs text-slate-400">
+          Visualiza el trazado exacto, paradas realizadas y velocidades del día.
+        </div>
+      </div>
+
+      <!-- Tarjetas de Métricas del Día -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div class="bg-slate-900/70 border border-slate-800 p-3.5 rounded-xl shadow">
+          <div class="text-[11px] text-slate-400 uppercase font-semibold">Distancia Total</div>
+          <div id="stat-distance" class="text-xl font-extrabold text-blue-400 mt-1">0 km</div>
+        </div>
+        <div class="bg-slate-900/70 border border-slate-800 p-3.5 rounded-xl shadow">
+          <div class="text-[11px] text-slate-400 uppercase font-semibold">Velocidad Máx.</div>
+          <div id="stat-max-speed" class="text-xl font-extrabold text-amber-400 mt-1">0 km/h</div>
+        </div>
+        <div class="bg-slate-900/70 border border-slate-800 p-3.5 rounded-xl shadow">
+          <div class="text-[11px] text-slate-400 uppercase font-semibold">Velocidad Prom.</div>
+          <div id="stat-avg-speed" class="text-xl font-extrabold text-emerald-400 mt-1">0 km/h</div>
+        </div>
+        <div class="bg-slate-900/70 border border-slate-800 p-3.5 rounded-xl shadow">
+          <div class="text-[11px] text-slate-400 uppercase font-semibold">Tiempo en Marcha</div>
+          <div id="stat-moving-time" class="text-xl font-extrabold text-slate-200 mt-1">0m</div>
+        </div>
+        <div class="bg-slate-900/70 border border-slate-800 p-3.5 rounded-xl shadow">
+          <div class="text-[11px] text-slate-400 uppercase font-semibold">Tiempo Detenido</div>
+          <div id="stat-stopped-time" class="text-xl font-extrabold text-slate-400 mt-1">0m</div>
+        </div>
+        <div class="bg-slate-900/70 border border-slate-800 p-3.5 rounded-xl shadow">
+          <div class="text-[11px] text-slate-400 uppercase font-semibold">Paradas (>3 min)</div>
+          <div id="stat-stops-count" class="text-xl font-extrabold text-amber-500 mt-1">0</div>
+        </div>
+      </div>
+
+      <!-- Área de Visualización: Lista de Paradas + Mapa con Reproductor -->
+      <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 flex-1 min-h-[500px]">
+        
+        <!-- Lista de Paradas del Día -->
+        <div class="lg:col-span-1 bg-slate-900/70 border border-slate-800 rounded-2xl p-4 flex flex-col h-[520px] shadow-xl">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center justify-between">
+            <span>Paradas Realizadas</span>
+            <span class="text-[10px] text-slate-500">Toca para ubicar</span>
+          </h3>
+          <div id="history-stops-list" class="flex-1 overflow-y-auto space-y-2 pr-1">
+            <div class="text-xs text-slate-500 py-6 text-center">Consulta un recorrido para ver sus paradas.</div>
+          </div>
+        </div>
+
+        <!-- Mapa del Recorrido con Barra de Reproducción -->
+        <div class="lg:col-span-3 bg-slate-900/70 border border-slate-800 rounded-2xl overflow-hidden relative shadow-xl flex flex-col h-[520px]">
+          
+          <div id="history-map" class="w-full flex-1 z-0"></div>
+
+          <!-- Aviso de recorrido vacío -->
+          <div id="history-empty-notice" class="hidden absolute inset-0 z-10 bg-slate-950/80 backdrop-blur flex flex-col items-center justify-center text-center p-6">
+            <div class="text-5xl mb-3">📍</div>
+            <h4 class="text-lg font-bold text-slate-200">No hay registros para este día</h4>
+            <p class="text-xs text-slate-400 max-w-md mt-1">El vehículo no registró coordenadas en la fecha seleccionada. Puedes usar el simulador para generar un recorrido de demostración con 1 clic.</p>
+          </div>
+
+          <!-- Panel Inferior: Reproductor Animado de Ruta (Timeline Playback) -->
+          <div id="playback-controls-panel" class="hidden z-10 bg-slate-900/95 border-t border-slate-800 p-3.5 flex flex-col gap-2">
+            <div class="flex items-center gap-3">
+              <button id="btn-playback-play" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1">
+                ▶️ Reproducir
+              </button>
+
+              <!-- Scrubber Timeline Slider -->
+              <div class="flex-1 flex items-center gap-3">
+                <input type="range" id="playback-scrubber" min="0" max="100" value="0" class="timeline-scrubber">
+              </div>
+
+              <!-- Velocidad de Reproducción -->
+              <div class="flex items-center gap-1.5 text-xs text-slate-400">
+                <span>Velocidad:</span>
+                <select id="playback-speed-select" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-slate-200 text-xs">
+                  <option value="1">1x</option>
+                  <option value="2">2x</option>
+                  <option value="5" selected>5x</option>
+                  <option value="10">10x</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between text-xs text-slate-400 px-1">
+              <div class="flex items-center gap-3">
+                <span>Hora en ruta: <b id="playback-current-time" class="text-slate-200 font-mono">--:--:--</b></span>
+                <span>Velocidad: <b id="playback-current-speed" class="text-emerald-400 font-bold">0 km/h</b></span>
+              </div>
+              <div class="text-[11px] text-slate-500">
+                🏁 Inicio (Verde) ➔ 🛑 Fin (Rojo) • 🟡 P1..Pn Paradas
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- PESTAÑA 3: GESTIÓN DE VEHÍCULOS (PANEL ADMINISTRADOR) -->
+    <!-- ============================================================== -->
+    <section id="tab-admin" class="tab-content-section hidden flex-1 flex flex-col gap-5">
+      
+      <!-- Barra Superior de Acciones de Administración -->
+      <div class="flex flex-wrap items-center justify-between gap-4 bg-slate-900/70 border border-slate-800 p-4 rounded-2xl shadow-lg">
+        <div>
+          <h2 class="text-lg font-extrabold text-white">Administración de Flota y Dispositivos</h2>
+          <p class="text-xs text-slate-400">Registra vehículos, genera códigos de emparejamiento móvil y gestiona el PIN maestro.</p>
+        </div>
+
+        <div class="flex items-center gap-2.5">
+          <button id="btn-new-vehicle" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-blue-900/30">
+            ➕ Registrar Nuevo Vehículo
+          </button>
+          <button onclick="document.getElementById('pin-modal').classList.add('active')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+            🔑 PIN Maestro de Seguridad
+          </button>
+        </div>
+      </div>
+
+      <!-- Cuadrícula de Tarjetas de Vehículos -->
+      <div id="admin-vehicles-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div class="col-span-full py-12 text-center text-slate-400">
+          <div class="text-3xl animate-bounce mb-2">🚚</div>
+          <div class="text-sm font-medium text-slate-300">Cargando vehículos de la flota...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- PESTAÑA 4: SIMULADOR GPS DE PRUEBA -->
+    <!-- ============================================================== -->
+    <section id="tab-simulator" class="tab-content-section hidden flex-1 flex flex-col gap-4">
+      <div class="max-w-3xl mx-auto w-full bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+        <div>
+          <h2 class="text-xl font-extrabold text-white flex items-center gap-2">
+            🧪 Simulador GPS para Pruebas Inmediatas
+          </h2>
+          <p class="text-sm text-slate-400 mt-1">
+            Esta herramienta te permite validar todo el sistema (transmisión en vivo, mapa y cálculo de recorridos diarios) directamente desde tu computadora sin tener que salir a la calle con un automóvil.
+          </p>
+        </div>
+
+        <div class="bg-slate-800/60 border border-slate-700 p-4 rounded-xl space-y-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">Seleccionar Vehículo para la Simulación:</label>
+            <select id="sim-vehicle-select" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+              <!-- Opciones automáticas -->
+            </select>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+            
+            <!-- Opción 1: Simulación en Vivo -->
+            <div class="bg-slate-900/70 p-4 rounded-xl border border-slate-800 flex flex-col justify-between">
+              <div>
+                <h3 class="text-sm font-bold text-slate-200 mb-1">1. Simular en Vivo (Tiempo Real)</h3>
+                <p class="text-xs text-slate-400 mb-3">El vehículo se moverá paso a paso cada 3 segundos sobre el mapa con rumbos y velocidades variables.</p>
+              </div>
+              <button id="btn-sim-realtime" class="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition">
+                ▶️ Iniciar Simulación en Vivo
+              </button>
+            </div>
+
+            <!-- Opción 2: Generar Día Completo de Recorrido -->
+            <div class="bg-slate-900/70 p-4 rounded-xl border border-slate-800 flex flex-col justify-between">
+              <div>
+                <h3 class="text-sm font-bold text-slate-200 mb-1">2. Generar Recorrido Diario Completo</h3>
+                <p class="text-xs text-slate-400 mb-3">Inyecta un día completo de trabajo con 40 puntos, 18 km y 3 paradas para probar el historial y el reproductor.</p>
+              </div>
+              <button id="btn-gen-history" class="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition">
+                ⚡ Generar Recorrido de Hoy
+              </button>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ============================================================== -->
+  <!-- MODAL: REGISTRAR / EDITAR VEHÍCULO -->
+  <!-- ============================================================== -->
+  <div id="vehicle-modal" class="modal-overlay">
+    <div class="modal-content p-6">
+      <div class="flex items-center justify-between mb-4 border-b border-slate-700/80 pb-3">
+        <h3 id="vehicle-modal-title" class="text-base font-bold text-white">Registrar Vehículo</h3>
+        <button onclick="AdminManager.closeModal('vehicle-modal')" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+
+      <form id="form-vehicle" class="space-y-4">
+        <input type="hidden" id="vehicle-id">
+
+        <div>
+          <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Nombre del Vehículo / Unidad:</label>
+          <input type="text" id="vehicle-name" required placeholder="Ej. Camión Reparto Norte" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Patente / Matrícula:</label>
+            <input type="text" id="vehicle-plate" required placeholder="Ej. AF 123 CD" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 uppercase focus:border-blue-500 focus:outline-none">
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Tipo de Vehículo:</label>
+            <select id="vehicle-type" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+              <option value="truck">🚚 Camión</option>
+              <option value="van">🚐 Furgón / Utilitario</option>
+              <option value="car">🚗 Auto</option>
+              <option value="motorcycle">🏍️ Motocicleta</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Chofer Asignado:</label>
+            <input type="text" id="vehicle-driver" placeholder="Ej. Juan Pérez" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Color Identificador:</label>
+            <div class="flex items-center gap-2">
+              <input type="color" id="vehicle-color" value="#2563eb" class="w-10 h-9 bg-transparent border-0 cursor-pointer rounded">
+              <span class="text-xs text-slate-400">Color del marcador</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-3 border-t border-slate-700/80">
+          <button type="button" onclick="AdminManager.closeModal('vehicle-modal')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold">
+            Cancelar
+          </button>
+          <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold shadow-md shadow-blue-900/40">
+            Guardar Vehículo
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================================================== -->
+  <!-- MODAL: CÓDIGO QR PARA VINCULAR DISPOSITIVO MÓVIL -->
+  <!-- ============================================================== -->
+  <div id="qr-modal" class="modal-overlay">
+    <div class="modal-content p-6 text-center">
+      <div class="flex items-center justify-between mb-4 border-b border-slate-700/80 pb-3">
+        <h3 id="qr-modal-title" class="text-base font-bold text-white">Vincular Dispositivo Móvil</h3>
+        <button onclick="AdminManager.closeModal('qr-modal')" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+
+      <div class="flex flex-col items-center py-2">
+        <div class="p-3 bg-white rounded-2xl shadow-xl border border-slate-200 mb-4 inline-block">
+          <img id="qr-code-img" src="" alt="Código QR para celular" class="w-48 h-48">
+        </div>
+
+        <div class="text-xs text-slate-400 mb-1">O ingresa manualmente este código en el móvil:</div>
+        <div id="qr-modal-code" class="text-2xl font-black font-mono text-blue-400 tracking-wider mb-3">TRK-0000</div>
+
+        <p class="text-xs text-slate-400 max-w-xs">
+          Abre la cámara del celular para escanear el QR o ingresa a la siguiente URL en el navegador del teléfono:
+        </p>
+        <a id="qr-modal-link" href="#" target="_blank" class="text-xs font-mono text-emerald-400 hover:underline break-all mt-2 bg-slate-900/90 p-2 rounded border border-slate-800">
+          http://localhost:3000/mobile
+        </a>
+      </div>
+
+      <div class="pt-4 border-t border-slate-700/80 mt-4">
+        <button type="button" onclick="AdminManager.closeModal('qr-modal')" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================== -->
+  <!-- MODAL: CONFIGURAR PIN MAESTRO DE ADMINISTRADOR -->
+  <!-- ============================================================== -->
+  <div id="pin-modal" class="modal-overlay">
+    <div class="modal-content p-6">
+      <div class="flex items-center justify-between mb-4 border-b border-slate-700/80 pb-3">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <span>🔒</span> PIN Maestro de Administrador
+        </h3>
+        <button onclick="AdminManager.closeModal('pin-modal')" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+
+      <p class="text-xs text-slate-400 mb-4">
+        Este PIN es requerido en los dispositivos móviles si alguien intenta desvincular el vehículo o detener el servicio de rastreo.
+      </p>
+
+      <form id="form-admin-pin" class="space-y-3">
+        <div>
+          <label class="block text-xs font-bold text-slate-400 uppercase mb-1">PIN Actual (Por defecto: 1234):</label>
+          <input type="password" id="current-pin" required placeholder="PIN Actual" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none font-mono text-center tracking-widest">
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Nuevo PIN (Mínimo 4 dígitos):</label>
+          <input type="password" id="new-pin" required minlength="4" placeholder="Nuevo PIN" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none font-mono text-center tracking-widest">
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Confirmar Nuevo PIN:</label>
+          <input type="password" id="confirm-pin" required minlength="4" placeholder="Confirmar PIN" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none font-mono text-center tracking-widest">
+        </div>
+
+        <div class="flex justify-end gap-2 pt-3 border-t border-slate-700/80">
+          <button type="button" onclick="AdminManager.closeModal('pin-modal')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold">
+            Cancelar
+          </button>
+          <button type="submit" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold">
+            Actualizar PIN
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATIONS -->
+  <div id="toast-container"></div>
+
+  <!-- SCRIPTS DE LA APLICACIÓN -->
+  <script src="/js/map.js"></script>
+  <script src="/js/admin.js"></script>
+  <script src="/js/history.js"></script>
+  <script src="/js/simulator.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

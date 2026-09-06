@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>GPS Vehículo - Transmisor en Segundo Plano</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- PWA y Estilos -->
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+</head>
+<body class="bg-slate-950 text-slate-100 flex flex-col min-h-screen select-none">
+
+  <!-- ============================================================== -->
+  <!-- VISTA 1: EMPAREJAMIENTO DE DISPOSITIVO (SOLO LA PRIMERA VEZ) -->
+  <!-- ============================================================== -->
+  <section id="mobile-pairing-section" class="flex-1 flex flex-col items-center justify-center p-6 max-w-md mx-auto w-full">
+    <div class="w-full bg-slate-900/90 border border-slate-800 rounded-3xl p-6 shadow-2xl text-center space-y-5">
+      
+      <div class="w-16 h-16 bg-blue-600/20 border border-blue-500/40 rounded-2xl flex items-center justify-center text-3xl mx-auto shadow-inner">
+        🚚
+      </div>
+
+      <div>
+        <h1 class="text-xl font-extrabold text-white">Vincular a Vehículo</h1>
+        <p class="text-xs text-slate-400 mt-1">
+          Ingresa el código de activación generado en el Panel Web Administrador para asignar este teléfono al vehículo.
+        </p>
+      </div>
+
+      <form id="mobile-pair-form" class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Código de Activación:</label>
+          <input type="text" id="pair-code-input" required placeholder="Ej. TRK-1001" class="w-full bg-slate-950 border-2 border-slate-700 focus:border-blue-500 rounded-xl px-4 py-3.5 text-center font-mono text-xl font-bold tracking-widest text-blue-400 uppercase focus:outline-none transition">
+        </div>
+
+        <button type="submit" class="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-900/40 transition">
+          🚀 Vincular y Activar Rastreo Permanente
+        </button>
+      </form>
+
+      <div class="text-[11px] text-slate-500 pt-2 border-t border-slate-800/80">
+        Una vez vinculado, la app transmitirá la posición en segundo plano y solo podrá detenerse con el PIN de administrador.
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================== -->
+  <!-- VISTA 2: VEHÍCULO VINCULADO Y RASTREADOR ACTIVO -->
+  <!-- ============================================================== -->
+  <section id="mobile-active-section" class="hidden flex-1 flex flex-col">
+    
+    <!-- Header del Vehículo -->
+    <header class="p-4 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between sticky top-0 z-30">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-blue-600/30 border border-blue-500/50 flex items-center justify-center text-xl">
+          🚚
+        </div>
+        <div>
+          <h2 id="m-vehicle-name" class="text-base font-extrabold text-white leading-tight">Cargando...</h2>
+          <div class="text-xs text-slate-400 font-mono">
+            Patente: <b id="m-vehicle-plate" class="text-slate-200">--</b> • <span id="m-vehicle-driver" class="text-slate-400">--</span>
+          </div>
+        </div>
+      </div>
+      <div class="text-right">
+        <span id="m-vehicle-code" class="text-xs font-mono font-bold text-blue-400 bg-blue-950/80 px-2 py-1 rounded border border-blue-800/60">TRK-0000</span>
+      </div>
+    </header>
+
+    <!-- Selector de Pestañas Móviles -->
+    <div class="flex border-b border-slate-800 bg-slate-900/60">
+      <button id="tab-btn-tracker" class="flex-1 py-3 text-sm font-bold border-b-2 border-blue-500 text-blue-400 text-center">
+        📡 Estado y GPS
+      </button>
+      <button id="tab-btn-my-route" class="flex-1 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 text-center">
+        📅 Mi Recorrido del Día
+      </button>
+    </div>
+
+    <!-- CONTENIDO 1: TRANSMISOR GPS EN SEGUNDO PLANO -->
+    <div id="mobile-tab-tracker-content" class="flex-1 p-4 flex flex-col justify-between max-w-lg mx-auto w-full space-y-4">
+      
+      <div class="space-y-4">
+        
+        <!-- Badge de Estado Permanente -->
+        <div class="flex items-center justify-center">
+          <div id="m-status-badge" class="px-4 py-2 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center gap-2 shadow-lg">
+            <span class="pulse-beacon"></span> TRANSMITIENDO EN SEGUNDO PLANO
+          </div>
+        </div>
+
+        <!-- Indicador de Búfer Offline si pierde señal -->
+        <div id="m-offline-badge" class="hidden text-center text-xs font-bold text-amber-400 bg-amber-500/20 border border-amber-500/30 py-2 px-3 rounded-xl">
+          📶 Sin señal 4G (Puntos guardados en el teléfono)
+        </div>
+
+        <!-- Aviso de error de GPS si existe -->
+        <div id="m-gps-error" class="hidden text-center text-xs text-red-400 bg-red-950/60 border border-red-800/60 p-2.5 rounded-xl"></div>
+
+        <!-- Tarjeta de Velocidad Grande (Dashboard del Conductor) -->
+        <div class="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 text-center shadow-xl">
+          <div class="text-xs uppercase font-bold text-slate-400 tracking-wider">Velocidad Actual</div>
+          <div id="m-speed" class="text-6xl font-black text-emerald-400 font-mono my-2 tracking-tight">0 km/h</div>
+          <div class="text-xs text-slate-500">Precisión GPS: <span id="m-accuracy" class="text-slate-300 font-bold">±0 m</span></div>
+        </div>
+
+        <!-- Métricas de Telemetría -->
+        <div class="grid grid-cols-2 gap-3">
+          <div class="bg-slate-900/60 border border-slate-800 p-3.5 rounded-2xl">
+            <div class="text-[11px] text-slate-400 uppercase font-semibold">Batería Móvil</div>
+            <div id="m-battery" class="text-lg font-bold text-slate-200 mt-0.5">--%</div>
+          </div>
+          <div class="bg-slate-900/60 border border-slate-800 p-3.5 rounded-2xl">
+            <div class="text-[11px] text-slate-400 uppercase font-semibold">Puntos Enviados</div>
+            <div id="m-points-sent" class="text-lg font-bold text-blue-400 mt-0.5">0</div>
+          </div>
+        </div>
+
+        <div class="bg-slate-900/60 border border-slate-800 p-3.5 rounded-2xl text-xs space-y-1.5">
+          <div class="flex justify-between">
+            <span class="text-slate-400">Coordenadas:</span>
+            <span id="m-coords" class="font-mono text-slate-300">Esperando GPS...</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-400">Última Transmisión:</span>
+            <span id="m-last-sent-time" class="text-slate-300 font-mono">--:--:--</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-400">Pantalla Activa:</span>
+            <span class="text-emerald-400 font-semibold">WakeLock Activo ✓</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Zona Inferior: Botón protegido contra desactivación accidental -->
+      <div class="pt-4 border-t border-slate-800/80">
+        <button id="btn-mobile-unlink" class="w-full py-3 bg-slate-900 hover:bg-red-950/40 text-slate-400 hover:text-red-400 border border-slate-800 hover:border-red-900/60 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2">
+          <span>🔒</span> Quitar Configuración / Desvincular (Requiere PIN)
+        </button>
+      </div>
+
+    </div>
+
+    <!-- CONTENIDO 2: PESTAÑA MI RECORRIDO DEL DÍA EN EL CELULAR -->
+    <div id="mobile-tab-route-content" class="hidden flex-1 flex flex-col p-3 gap-3">
+      
+      <!-- Selector de Fecha en Móvil -->
+      <div class="bg-slate-900/80 border border-slate-800 p-3 rounded-2xl flex items-center justify-between">
+        <label class="text-xs font-bold text-slate-300 uppercase">Fecha:</label>
+        <input type="date" id="mobile-date-input" class="bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-blue-500">
+      </div>
+
+      <!-- Métricas del Día en Móvil -->
+      <div class="grid grid-cols-3 gap-2 text-center">
+        <div class="bg-slate-900/60 border border-slate-800 p-2.5 rounded-xl">
+          <div class="text-[10px] text-slate-400 uppercase">Recorrido</div>
+          <div id="m-stat-km" class="text-base font-extrabold text-blue-400">0 km</div>
+        </div>
+        <div class="bg-slate-900/60 border border-slate-800 p-2.5 rounded-xl">
+          <div class="text-[10px] text-slate-400 uppercase">Vel. Máx</div>
+          <div id="m-stat-max-speed" class="text-base font-extrabold text-amber-400">0 km/h</div>
+        </div>
+        <div class="bg-slate-900/60 border border-slate-800 p-2.5 rounded-xl">
+          <div class="text-[10px] text-slate-400 uppercase">Paradas</div>
+          <div id="m-stat-stops" class="text-base font-extrabold text-emerald-400">0</div>
+        </div>
+      </div>
+
+      <!-- Mapa Móvil del Recorrido -->
+      <div class="flex-1 bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden min-h-[350px] relative shadow-lg">
+        <div id="mobile-route-map" class="w-full h-full z-0"></div>
+      </div>
+
+    </div>
+
+  </section>
+
+  <!-- ============================================================== -->
+  <!-- MODAL: PIN DE ADMINISTRADOR PARA DESVINCULAR / DETENER -->
+  <!-- ============================================================== -->
+  <div id="mobile-pin-modal" class="modal-overlay">
+    <div class="modal-content p-6 text-center max-w-sm">
+      <div class="w-12 h-12 rounded-full bg-red-500/20 text-red-400 border border-red-500/40 flex items-center justify-center text-2xl mx-auto mb-3">
+        🔒
+      </div>
+
+      <h3 class="text-base font-bold text-white mb-1">Rastreo Protegido</h3>
+      <p class="text-xs text-slate-400 mb-4">
+        Ingresa el PIN de Administrador configurado en la web para desvincular el vehículo y detener el rastreo.
+      </p>
+
+      <form id="form-verify-pin" class="space-y-4">
+        <div>
+          <input type="password" id="verify-pin-input" required placeholder="PIN de 4 dígitos" maxlength="8" class="w-full bg-slate-950 border-2 border-slate-700 focus:border-red-500 rounded-xl px-4 py-3 text-center font-mono text-2xl font-bold tracking-widest text-slate-100 focus:outline-none">
+        </div>
+
+        <div class="flex gap-2">
+          <button type="button" onclick="MobileTracker.closePinModal()" class="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold">
+            Cancelar
+          </button>
+          <button type="submit" class="flex-1 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold shadow-md shadow-red-900/40">
+            Desvincular
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- TOAST CONTAINER -->
+  <div id="toast-container"></div>
+
+  <!-- SCRIPTS -->
+  <script src="/js/map.js"></script>
+  <script src="/js/tracker.js"></script>
+  <script>
+    // Inicializar módulo móvil al cargar
+    document.addEventListener('DOMContentLoaded', () => {
+      MobileTracker.init();
+    });
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.innerText = message;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.remove();
+      }, 3500);
+    }
+  </script>
+</body>
+</html>

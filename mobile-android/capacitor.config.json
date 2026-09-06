@@ -1,0 +1,20 @@
+{
+  "appId": "com.gpsflota.tracker",
+  "appName": "GPS Vehicular Pro",
+  "webDir": "../public",
+  "bundledWebRuntime": false,
+  "plugins": {
+    "BackgroundRunner": {
+      "label": "com.gpsflota.tracker.background",
+      "src": "BackgroundTrackingService.js",
+      "event": "trackLocation",
+      "repeat": true,
+      "interval": 5,
+      "autoStart": true
+    }
+  },
+  "server": {
+    "cleartext": true,
+    "allowNavigation": ["*"]
+  }
+}

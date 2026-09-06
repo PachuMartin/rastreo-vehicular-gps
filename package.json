@@ -1,0 +1,25 @@
+{
+  "name": "rastreo-vehicular-gps",
+  "version": "1.0.0",
+  "description": "Sistema de Rastreo Vehicular GPS con Gestion Centralizada y Moviles en Segundo Plano",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "sqlite3": "^5.1.7",
+    "ws": "^8.18.0"
+  },
+  "keywords": [
+    "gps",
+    "tracker",
+    "fleet",
+    "flota",
+    "vehiculos",
+    "rutas"
+  ],
+  "author": "Antigravity",
+  "license": "ISC"
+}
