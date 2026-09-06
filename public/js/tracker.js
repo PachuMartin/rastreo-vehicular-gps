@@ -13,6 +13,7 @@ const MobileTracker = {
   localMap: null,
   localRouteLayer: null,
   lastPairingError: null,
+  qrScanner: null,
 
   async init() {
     this.initDeviceToken();
@@ -82,6 +83,29 @@ const MobileTracker = {
     const pairForm = document.getElementById('mobile-pair-form');
     if (pairForm) {
       pairForm.addEventListener('submit', (e) => this.handlePairSubmit(e));
+    }
+
+    // Escáner de Código QR con Cámara
+    const btnOpenQr = document.getElementById('btn-open-qr-scanner');
+    if (btnOpenQr) {
+      btnOpenQr.addEventListener('click', () => this.openQrScanner());
+    }
+
+    const btnCloseQr = document.getElementById('btn-close-qr-scanner');
+    if (btnCloseQr) {
+      btnCloseQr.addEventListener('click', () => this.stopQrScanner());
+    }
+
+    const btnCancelQr = document.getElementById('btn-cancel-qr-scanner');
+    if (btnCancelQr) {
+      btnCancelQr.addEventListener('click', () => this.stopQrScanner());
+    }
+
+    const qrModal = document.getElementById('qr-scanner-modal');
+    if (qrModal) {
+      qrModal.addEventListener('click', (e) => {
+        if (e.target === qrModal) this.stopQrScanner();
+      });
     }
 
     // Botón de descargar informe de error
@@ -165,9 +189,179 @@ const MobileTracker = {
     }
   },
 
+  // ==============================================================
+  // ESCÁNER DE CÓDIGO QR CON CÁMARA (HTML5-QRCODE)
+  // ==============================================================
+  async openQrScanner() {
+    const modal = document.getElementById('qr-scanner-modal');
+    const loading = document.getElementById('qr-loading-indicator');
+    const status = document.getElementById('qr-scanner-status');
+
+    if (modal) modal.classList.add('active');
+    if (loading) loading.classList.remove('hidden');
+    if (status) {
+      status.innerText = 'Iniciando cámara...';
+      status.className = 'text-xs text-slate-400 font-medium';
+    }
+
+    try {
+      if (typeof Html5Qrcode === 'undefined') {
+        throw new Error('La librería del escáner no está lista. Revisa tu conexión.');
+      }
+
+      // Detener cualquier instancia previa activa
+      if (this.qrScanner) {
+        await this.stopQrScanner();
+      }
+
+      this.qrScanner = new Html5Qrcode('qr-reader');
+
+      const config = {
+        fps: 10,
+        qrbox: (viewfinderWidth, viewfinderHeight) => {
+          const edge = Math.min(viewfinderWidth, viewfinderHeight) * 0.75;
+          return { width: Math.round(edge), height: Math.round(edge) };
+        },
+        aspectRatio: 1.0
+      };
+
+      // Intentar primero con la cámara trasera ('environment')
+      try {
+        await this.qrScanner.start(
+          { facingMode: 'environment' },
+          config,
+          (decodedText) => this.onQrCodeScanned(decodedText),
+          () => {} // Ignorar cuadros sin código
+        );
+      } catch (camErr) {
+        console.warn('Fallo cámara trasera preferida, probando cámaras disponibles:', camErr);
+        const cameras = await Html5Qrcode.getCameras();
+        if (cameras && cameras.length > 0) {
+          const selectedCam = cameras[cameras.length - 1].id;
+          await this.qrScanner.start(
+            selectedCam,
+            config,
+            (decodedText) => this.onQrCodeScanned(decodedText),
+            () => {}
+          );
+        } else {
+          throw camErr;
+        }
+      }
+
+      if (loading) loading.classList.add('hidden');
+      if (status) {
+        status.innerText = '📷 Apunta la cámara al código QR';
+        status.className = 'text-xs text-emerald-400 font-bold';
+      }
+    } catch (err) {
+      console.error('Error al inicializar cámara:', err);
+      if (loading) loading.classList.add('hidden');
+
+      let userMsg = 'No se pudo acceder a la cámara.';
+      if (err.name === 'NotAllowedError' || (err.message && err.message.toLowerCase().includes('permission'))) {
+        userMsg = 'Permiso denegado: Por favor habilita el permiso de Cámara para esta aplicación en los Ajustes del dispositivo.';
+      } else if (err.name === 'NotFoundError' || (err.message && err.message.toLowerCase().includes('no camera'))) {
+        userMsg = 'No se detectó cámara disponible en el dispositivo.';
+      } else if (err.message) {
+        userMsg = err.message;
+      }
+
+      if (status) {
+        status.innerText = `⚠️ ${userMsg}`;
+        status.className = 'text-xs text-red-400 font-semibold';
+      }
+      showToast('No se pudo abrir la cámara', 'danger');
+    }
+  },
+
+  async stopQrScanner() {
+    const modal = document.getElementById('qr-scanner-modal');
+    if (modal) modal.classList.remove('active');
+
+    if (this.qrScanner) {
+      try {
+        if (this.qrScanner.isScanning) {
+          await this.qrScanner.stop();
+        }
+        this.qrScanner.clear();
+      } catch (e) {
+        console.warn('Error cerrando escáner:', e);
+      }
+      this.qrScanner = null;
+    }
+  },
+
+  async onQrCodeScanned(decodedText) {
+    if (!decodedText) return;
+    console.log('Código QR detectado:', decodedText);
+
+    // Detener la cámara de inmediato
+    await this.stopQrScanner();
+
+    const raw = decodedText.trim();
+    let serverFound = null;
+    let codeFound = null;
+
+    // Caso 1: URL completa del panel web (ej. https://mi-app.onrender.com/mobile?code=TRK-1001)
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      try {
+        const url = new URL(raw);
+        serverFound = url.origin;
+        if (url.searchParams.has('code')) {
+          codeFound = url.searchParams.get('code');
+        }
+      } catch (e) {
+        console.warn('Error analizando URL escaneada:', e);
+      }
+    }
+
+    // Caso 2: Si el QR es solo el código o texto con formato TRK-XXXX
+    if (!codeFound) {
+      const match = raw.match(/(TRK-[A-Za-z0-9_-]+)/i);
+      if (match) {
+        codeFound = match[1].toUpperCase();
+      } else if (!raw.includes('/') && !raw.includes(' ') && raw.length <= 25) {
+        codeFound = raw.toUpperCase();
+      }
+    }
+
+    // Si se extrajo la dirección del servidor, guardarla y aplicarla
+    if (serverFound) {
+      const serverInput = document.getElementById('server-url-input');
+      const badge = document.getElementById('server-detected-badge');
+      if (serverInput) {
+        serverInput.value = serverFound;
+        localStorage.setItem('gps_server_url', serverFound);
+        if (badge) badge.innerText = 'Detectado por QR';
+      }
+    }
+
+    // Si se extrajo el código de activación, aplicarlo y disparar vinculación
+    const codeInput = document.getElementById('pair-code-input');
+    if (codeFound && codeInput) {
+      codeInput.value = codeFound;
+      showToast(`¡Código ${codeFound} detectado! Conectando...`, 'success');
+
+      setTimeout(() => {
+        const pairForm = document.getElementById('mobile-pair-form');
+        if (pairForm && typeof pairForm.requestSubmit === 'function') {
+          pairForm.requestSubmit();
+        } else {
+          this.handlePairSubmit();
+        }
+      }, 350);
+    } else {
+      if (codeInput) codeInput.value = raw;
+      showToast(`Escaneado: ${raw}`, 'info');
+    }
+  },
+
   // Emparejar teléfono con el código generado desde la web
   async handlePairSubmit(e) {
-    e.preventDefault();
+    if (e && typeof e.preventDefault === 'function') {
+      e.preventDefault();
+    }
     const codeInput = document.getElementById('pair-code-input');
     const code = codeInput ? codeInput.value.trim().toUpperCase() : '';
     const errorBox = document.getElementById('pairing-error-box');

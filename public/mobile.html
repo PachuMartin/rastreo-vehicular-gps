@@ -12,6 +12,14 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
+  <!-- Scanner QR con Cámara (html5-qrcode local + CDN fallback) -->
+  <script src="/js/html5-qrcode.min.js"></script>
+  <script>
+    if (typeof Html5Qrcode === 'undefined') {
+      document.write('<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"><\/script>');
+    }
+  </script>
+
   <!-- PWA y Estilos -->
   <link rel="stylesheet" href="/css/styles.css">
   <link rel="manifest" href="/manifest.json">
@@ -39,6 +47,18 @@
       </div>
 
       <form id="mobile-pair-form" class="space-y-4">
+        <!-- Botón para Escanear Código QR con Cámara -->
+        <button type="button" id="btn-open-qr-scanner" class="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600/20 to-indigo-600/20 hover:from-blue-600/30 hover:to-indigo-600/30 border-2 border-dashed border-blue-500/60 hover:border-blue-400 text-blue-300 rounded-2xl font-bold text-sm shadow-md flex items-center justify-center gap-2.5 transition active:scale-[0.98]">
+          <span class="text-2xl">📷</span>
+          <span>Escanear Código QR con Cámara</span>
+        </button>
+
+        <div class="relative flex items-center justify-center my-1">
+          <div class="border-t border-slate-800 w-full"></div>
+          <span class="bg-slate-900 px-3 text-[11px] text-slate-500 uppercase font-semibold tracking-wider">o escribe manualmente</span>
+          <div class="border-t border-slate-800 w-full"></div>
+        </div>
+
         <div>
           <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Código de Activación:</label>
           <input type="text" id="pair-code-input" required placeholder="Ej. TRK-1001" class="w-full bg-slate-950 border-2 border-slate-700 focus:border-blue-500 rounded-xl px-4 py-3.5 text-center font-mono text-xl font-bold tracking-widest text-blue-400 uppercase focus:outline-none transition">
@@ -225,6 +245,43 @@
     </div>
 
   </section>
+
+  <!-- ============================================================== -->
+  <!-- MODAL: ESCÁNER DE CÓDIGO QR CON CÁMARA (HTML5-QRCODE) -->
+  <!-- ============================================================== -->
+  <div id="qr-scanner-modal" class="modal-overlay">
+    <div class="modal-content p-5 text-center max-w-sm w-full bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl space-y-4 relative">
+      <!-- Botón Cerrar X -->
+      <button type="button" id="btn-close-qr-scanner" class="absolute top-3 right-3 w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center font-bold text-sm transition">
+        ✕
+      </button>
+
+      <div class="flex items-center justify-center gap-2 text-blue-400">
+        <span class="text-2xl">📷</span>
+        <h3 class="text-base font-bold text-white">Escanear Código QR</h3>
+      </div>
+
+      <p class="text-xs text-slate-400">
+        Apunta la cámara del teléfono hacia el código QR mostrado en el Panel Administrador Web.
+      </p>
+
+      <!-- Visor de la cámara -->
+      <div class="relative overflow-hidden rounded-2xl bg-black border-2 border-blue-500/40 shadow-inner flex flex-col items-center justify-center min-h-[260px] w-full">
+        <div id="qr-reader" class="w-full"></div>
+        <div id="qr-loading-indicator" class="text-slate-400 text-xs flex flex-col items-center gap-2 py-8">
+          <div class="w-7 h-7 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+          <span>Iniciando cámara...</span>
+        </div>
+      </div>
+
+      <!-- Estado / Error del escáner -->
+      <div id="qr-scanner-status" class="text-xs text-slate-400 font-medium"></div>
+
+      <button type="button" id="btn-cancel-qr-scanner" class="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition">
+        Cancelar
+      </button>
+    </div>
+  </div>
 
   <!-- ============================================================== -->
   <!-- MODAL: PIN DE ADMINISTRADOR PARA DESVINCULAR / DETENER -->
