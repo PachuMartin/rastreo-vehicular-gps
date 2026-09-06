@@ -58,6 +58,11 @@ wss.on('connection', (ws) => {
 // RUTAS DE LA API REST
 // ==========================================
 
+// 0. Health check para servicios de monitorización y keep-alive (evita que Render se duerma)
+app.get(['/health', '/api/health'], (req, res) => {
+  res.status(200).send('OK');
+});
+
 // 1. Estado y red
 app.get('/api/status', (req, res) => {
   res.json({
