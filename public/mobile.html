@@ -23,6 +23,7 @@
   <!-- PWA y Estilos -->
   <link rel="stylesheet" href="/css/styles.css">
   <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛰️</text></svg>">
   <meta name="theme-color" content="#0f172a">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -35,14 +36,19 @@
   <section id="mobile-pairing-section" class="flex-1 flex flex-col items-center justify-center p-6 max-w-md mx-auto w-full">
     <div class="w-full bg-slate-900/90 border border-slate-800 rounded-3xl p-6 shadow-2xl text-center space-y-5">
       
-      <div class="w-16 h-16 bg-blue-600/20 border border-blue-500/40 rounded-2xl flex items-center justify-center text-3xl mx-auto shadow-inner">
-        🚚
+      <!-- LOGO Y NOMBRE DE LA APLICACIÓN -->
+      <div class="flex flex-col items-center justify-center pt-1">
+        <div class="w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center text-3xl mx-auto shadow-lg shadow-blue-600/30 mb-2.5 border border-blue-400/30">
+          🛰️
+        </div>
+        <h1 class="text-2xl font-black tracking-tight text-white">GPS Flota Blt</h1>
+        <p class="text-[11px] text-blue-400 font-bold tracking-wider uppercase mt-0.5">Transmisor en Segundo Plano</p>
       </div>
 
-      <div>
-        <h1 class="text-xl font-extrabold text-white">Vincular a Vehículo</h1>
+      <div class="border-t border-slate-800/80 pt-3">
+        <h2 class="text-sm font-bold text-slate-200">Vincular a Vehículo</h2>
         <p class="text-xs text-slate-400 mt-1">
-          Ingresa el código de activación generado en el Panel Web Administrador para asignar este teléfono al vehículo.
+          Ingresa el código de activación o escanea el código QR generado en el Panel Web Administrador.
         </p>
       </div>
 
@@ -126,6 +132,7 @@
           🚚
         </div>
         <div>
+          <div class="text-[10px] font-black uppercase tracking-wider text-blue-400">GPS Flota Blt</div>
           <h2 id="m-vehicle-name" class="text-base font-extrabold text-white leading-tight">Cargando...</h2>
           <div class="text-xs text-slate-400 font-mono">
             Patente: <b id="m-vehicle-plate" class="text-slate-200">--</b> • <span id="m-vehicle-driver" class="text-slate-400">--</span>
