@@ -1,6 +1,6 @@
 {
   "appId": "com.gpsflota.tracker",
-  "appName": "GPS Vehicular Pro",
+  "appName": "GPS Flota Blt",
   "webDir": "../public",
   "bundledWebRuntime": false,
   "plugins": {

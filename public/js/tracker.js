@@ -521,7 +521,7 @@ const MobileTracker = {
 
     return [
       '====================================================================',
-      '        INFORME DE ERROR DE VINCULACIÓN - GPS VEHICULAR PRO         ',
+      '           INFORME DE ERROR DE VINCULACIÓN - GPS FLOTA BLT          ',
       '====================================================================',
       `Fecha y Hora Local : ${now.toLocaleString()}`,
       `Fecha y Hora UTC   : ${now.toISOString()}`,

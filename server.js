@@ -67,7 +67,7 @@ app.get(['/health', '/api/health'], (req, res) => {
 app.get('/api/status', (req, res) => {
   res.json({
     status: 'online',
-    system: 'Rastreador Vehicular GPS Pro',
+    system: 'GPS Flota Blt',
     time: new Date().toISOString(),
     localIps: getLocalIpAddresses(),
     port: PORT
@@ -342,7 +342,7 @@ app.get('/mobile', (req, res) => {
 server.listen(PORT, '0.0.0.0', () => {
   const ips = getLocalIpAddresses();
   console.log('====================================================');
-  console.log(`🚀 SERVIDOR DE RASTREO VEHICULAR GPS INICIADO`);
+  console.log(`🚀 SERVIDOR GPS FLOTA BLT INICIADO`);
   console.log(`🌐 Panel Central Web:   http://localhost:${PORT}`);
   console.log(`📱 App Móvil (Vehículo): http://localhost:${PORT}/mobile`);
   console.log('----------------------------------------------------');

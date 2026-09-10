@@ -1,6 +1,6 @@
 {
-  "name": "Rastreador Vehicular GPS Pro",
-  "short_name": "GPS Vehicular",
+  "name": "GPS Flota Blt",
+  "short_name": "GPS Flota Blt",
   "description": "Sistema de rastreo vehicular en tiempo real con ejecución en segundo plano y recorrido diario",
   "start_url": "/mobile",
   "display": "standalone",
